@@ -2,7 +2,7 @@ Analysis of quality movements for people practising barbell lifts.
 ========================================================================================
 This work has been created for the Course Project at the Practical Machine Learning course in Coursera (Aug 2014). In this assigment we have to develop a prediction model about the manner in which the users did the exercise. 
 
-The final report can be consulted at: http://rpubs.com/jagprieto/25635
+The final report can be consulted at: [http://rpubs.com/jagprieto/25635](http://rpubs.com/jagprieto/25635) 
 
 
 This repository contains the following files:
