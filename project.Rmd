@@ -1,0 +1,148 @@
+Analysis of quality movements for people practising barbell lifts.
+========================================================================================
+This work has been created for the Course Project at the Practical Machine Learning course in Coursera (Aug 2014). In this assigment we have to develop a prediction model about the manner in which the users did the exercise. To develop this task we use the database data created at the project http://groupware.les.inf.puc-rio.br/har where a group of users were asked to perform barbell lifts correctly and incorrectly in 5 different ways. Our final task is to construct a predictor that can be used to determine which kind of exercise is related to some new data.
+
+#  Loading libraries.
+In order to exectute the R code the following libraries must be loaded.
+```{r, message=FALSE}
+library(caret)
+library(ggplot2)
+library(corrgram)
+library(gridExtra)
+library(randomForest)
+```
+
+# Getting data.
+We start reading the movement training and predicting (used for data prediction submission) databases.
+```{r echo = TRUE, cache = TRUE}
+## Read training data.
+training.csv <- read.csv('pml-training.csv',  header=TRUE) 
+predicting <- read.csv('pml-testing.csv',  header=TRUE)             
+```
+Let's filter the training data by getting the data related to users movement but not the data related to the summary of each exercise window time.
+```{r echo = TRUE, cache = TRUE}
+# Filter and avoid window movement summary data.
+training.csv <- training.csv[training.csv$new_window =='no',]          
+```
+
+# Cleaning data.
+Now we create the data partition to create training data for the model and the cross validation test. We use 60% of data for training and 40% for cross validation testing.
+```{r echo = TRUE, cache = TRUE}
+## Create data parition
+inTrain <- createDataPartition(training.csv$classe, p = 0.60)[[1]]
+training <- training.csv[inTrain,]
+testing <- training.csv[-inTrain,]               
+```
+
+Next we clean the data in order to apply the exploratory data analysis to select the variables that will be used as predictors. We first create the complete list of available predictor candidates (obtained form the predicting data frame) as follows:
+```{r echo = TRUE, cache = TRUE}
+# Columns candidates to develop predictions.
+colnames.predicting <- c('roll_belt', 'pitch_belt', 'yaw_belt', 'total_accel_belt')
+colnames.predicting <- c(colnames.predicting, 'gyros_belt_x', 'gyros_belt_y', 'gyros_belt_z')
+colnames.predicting <- c(colnames.predicting, 'accel_belt_x', 'accel_belt_y', 'accel_belt_z')
+colnames.predicting <- c(colnames.predicting, 'magnet_belt_y', 'magnet_belt_x', 'magnet_belt_z')
+colnames.predicting <- c(colnames.predicting, 'roll_arm', 'pitch_arm', 'yaw_arm', 'total_accel_arm')
+colnames.predicting <- c(colnames.predicting, 'gyros_arm_x', 'gyros_arm_y', 'gyros_arm_z')
+colnames.predicting <- c(colnames.predicting, 'accel_arm_x', 'accel_arm_y', 'accel_arm_z')
+colnames.predicting <- c(colnames.predicting, 'magnet_arm_x', 'magnet_arm_y', 'magnet_arm_z')
+colnames.predicting <- c(colnames.predicting, 'roll_dumbbell', 'pitch_dumbbell', 'yaw_dumbbell')
+colnames.predicting <- c(colnames.predicting, 'gyros_dumbbell_x', 'gyros_dumbbell_y', 'gyros_dumbbell_z')
+colnames.predicting <- c(colnames.predicting, 'accel_dumbbell_x', 'accel_dumbbell_y', 'accel_dumbbell_z')
+colnames.predicting <- c(colnames.predicting, 'magnet_dumbbell_x', 'magnet_dumbbell_y', 'magnet_dumbbell_z')
+colnames.predicting <- c(colnames.predicting, 'roll_forearm', 'pitch_forearm', 'yaw_forearm', 'total_accel_forearm')
+colnames.predicting <- c(colnames.predicting, 'gyros_forearm_x', 'gyros_forearm_y', 'gyros_forearm_z')
+colnames.predicting <- c(colnames.predicting, 'accel_forearm_x', 'accel_forearm_y', 'accel_forearm_z')
+colnames.predicting <- c(colnames.predicting, 'magnet_forearm_x', 'magnet_forearm_y', 'magnet_forearm_z')
+```
+and finally clean the data using this list of columns.
+```{r echo = TRUE, cache = TRUE}
+# Create training and testing clean data frames.
+testing.clean <- testing[, c('classe', colnames.predicting)]
+training.clean <- training[, c('classe', colnames.predicting)]              
+```
+
+# Predictors selection.
+In order to make a selection of the predictors we use the following plot of the matrix correlation. 
+```{r echo = TRUE, cache = TRUE, fig.width=24, fig.height=24}
+## Plot the correlation diagram.
+corrgram(training.clean, lower.panel=panel.shade, upper.panel=panel.pie, text.panel=panel.txt, main="Complete variables correlation matrix")         
+```
+In this figure we can visualize which variables are highly correlated because they appear with colours very resalted (red for negative and blue for possitive correlation values) so we can select them some of theses variables an avoid others.
+
+After the exploration of this diagram we take the list of variables with a correlation below 50% (negative of possitive), which lead to the following list of 21 predictor candidates.
+```{r echo = TRUE, cache = TRUE}
+#Columns candidates to develop predictions without correlated predictors.
+colnames.predicting <- c('roll_belt', 'pitch_belt')
+colnames.predicting <- c(colnames.predicting, 'gyros_belt_x', 'gyros_belt_y', 'gyros_belt_z')
+colnames.predicting <- c(colnames.predicting, 'magnet_belt_y')
+colnames.predicting <- c(colnames.predicting, 'roll_arm', 'pitch_arm', 'yaw_arm', 'total_accel_arm')
+colnames.predicting <- c(colnames.predicting, 'gyros_arm_x')
+colnames.predicting <- c(colnames.predicting, 'accel_arm_x')
+colnames.predicting <- c(colnames.predicting, 'roll_dumbbell', 'pitch_dumbbell')
+colnames.predicting <- c(colnames.predicting, 'gyros_dumbbell_x')
+colnames.predicting <- c(colnames.predicting,  'magnet_dumbbell_z')
+colnames.predicting <- c(colnames.predicting,  'pitch_forearm', 'yaw_forearm', 'total_accel_forearm')
+colnames.predicting <- c(colnames.predicting, 'gyros_forearm_x')
+colnames.predicting <- c(colnames.predicting, 'accel_forearm_y')
+```
+
+Again let's clean the data using the definitive list of candidates.
+```{r echo = TRUE, cache = TRUE}
+# Create training and testing clean data frames.
+testing.clean <- testing[, c('classe', colnames.predicting)]
+training.clean <- training[, c('classe', colnames.predicting)]              
+```
+
+This predictors selection generates the following correlation matrix diagram where all the variables are correlated between them below 50% . 
+```{r echo = TRUE, cache = TRUE, fig.width=24, fig.height=24}
+# Plot correlation matrix
+corrgram(training.clean, lower.panel=panel.shade, upper.panel=panel.pie, text.panel=panel.txt, main="Predictors correlation matrix")        
+```
+
+Before to continue with the model creation we check that none of the selected predictors is a variable
+with very small variance.
+```{r echo = TRUE, cache = TRUE}
+nearZeroVar(training.clean, saveMetrics = TRUE)
+```
+As we can see from the plot and this NZV result we have 21 predictor variables that are uncorrelated and none of them is a NZV, so 
+we will use this list of variables for training the model.
+
+# Prediction model and testing.
+In this final section we create a model for the prediction of the type of exercise related to the user movement data.
+To develop this task we first create a model using the random forest algorithm with the default package options and:
+
+1. The importance of predictors must be assessed. 
+2. The algorithm must use the 21 list of predictors selected in the previous section.
+
+Let's create the random forest model.
+```{r echo = TRUE, cache = TRUE}
+# Create the prediction model using random forest.
+set.seed(1251)
+prediction.model <- randomForest(classe ~ ., importance  = TRUE, data = training.clean) 
+```
+
+We obtain the following results applied over the training data:
+```{r echo = TRUE, cache = TRUE}
+print(prediction.model)
+```
+
+Now we want to apply a cross validation process and check the results of the predictions when we consider
+the testing data. The confusion matrix and overall statistics related to the prediction operation 
+obtained with this operation are:
+```{r echo = TRUE, cache = TRUE}
+# Test the results against the testing data.
+prediction.testing <- predict(prediction.model, newdata=testing.clean)
+confusionMatrix(testing.clean$classe, prediction.testing)
+```
+
+We can see that the model created performs a very acceptable classification process over the test data with high general accuracy of 98.7% (96.2% minimum class Sensitivity or Specificity), with a very short 95% confidence interval (0.984, 0.989) and small P-Value (<2e-16 ). 
+
+
+Finally we want to obtain the prediction data related to the assignment.
+```{r echo = TRUE, cache = TRUE}
+# Test the results against the testing data.
+predicting.testing <- predict(prediction.model, newdata=predicting)
+```
+This leads to a final resutl of 100% of possitive predictions at the submission coursera course.
+
+
